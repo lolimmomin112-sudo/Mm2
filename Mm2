@@ -1162,14 +1162,6 @@ local function destroyRangeIndicator()
     end
 end
 
--- Show indicator only when AutoFarm is enabled or when slider is being adjusted? We'll show it whenever the slider exists (i.e., always when UI is loaded) but we can set its visibility based on AutoFarm state.
--- We'll make it visible only when AutoFarm is enabled, that way it doesn't clutter.
--- But the user said "when using the slider it shows", so we can also show it while sliding. We'll tie visibility to AutoFarm toggle, but we can also update it in slider callback.
--- We'll create the indicator but set its Transparency to 1 when farm is off, and 0.75 when on.
--- We'll also update it in the slider callback.
-
--- We'll create it now and update visibility in the auto farm toggle.
-
 -- Fling Logic - MAXIMUM POWER BOUNDARY BREAKER (ENHANCED: stronger, faster, anti-void)
 local function FlingTarget(targetPlayer)
     if not targetPlayer or not targetPlayer.Character then return end
@@ -1711,18 +1703,10 @@ end)
 createToggle(espTab, "Master ESP", function(v)
     getgenv().ESP_Enabled = v
     if not v then
-        -- When master is turned off, also turn off individual toggles visually? But they are separate.
-        -- The update loop will handle hiding everything based on ESP_Enabled.
-        -- But we also want the individual toggles to reflect that they are off when master is off?
-        -- The user wants master to turn them all on and off, so we set individual toggles accordingly.
-        -- However, the individual toggles should still be able to be toggled independently when master is on.
-        -- So we only set them when master is turned off to ensure they are off.
-        -- But we shouldn't force them when master is on.
         if not v then
             getgenv().ESP_Names = false
             getgenv().ESP_Boxes = false
             getgenv().ESP_Tracers = false
-            -- Also update toggle UI statuses
             for name, obj in pairs(toggles) do
                 if name == "Show Names" or name == "Show Boxes" or name == "Show Lines" then
                     obj.set(false, true)
@@ -1803,7 +1787,6 @@ local themeDropdown = createDropdown(settingsTab, "UI Theme", {"Black & Purple (
                         tabBtn.TextColor3 = T.TextDim
                     end
                 end
-                -- Update toggles and sliders
                 for _, toggleObj in pairs(toggles) do
                     if toggleObj.get() then
                         toggleObj.status.BackgroundColor3 = col
@@ -1819,7 +1802,6 @@ local themeDropdown = createDropdown(settingsTab, "UI Theme", {"Black & Purple (
                 if fovStroke then
                     fovStroke.Color = col
                 end
-                -- Update range indicator color
                 if rangeIndicator then
                     rangeIndicator.Color = col
                 end
@@ -1848,7 +1830,6 @@ local themeDropdown = createDropdown(settingsTab, "UI Theme", {"Black & Purple (
             tabBtn.TextColor3 = T.TextDim
         end
     end
-    -- Update toggle statuses and slider fills for non-RGB themes
     for _, toggleObj in pairs(toggles) do
         if toggleObj.get() then
             toggleObj.status.BackgroundColor3 = T.ToggleOn
@@ -1864,7 +1845,6 @@ local themeDropdown = createDropdown(settingsTab, "UI Theme", {"Black & Purple (
     if fovStroke then
         fovStroke.Color = T.Accent
     end
-    -- Update range indicator color
     if rangeIndicator then
         rangeIndicator.Color = T.Accent
     end
@@ -1904,19 +1884,16 @@ createButton(settingsTab, "Load Settings", function()
             return
         end
         local data = HttpService:JSONDecode(readfile("Scripterkiddo_Config.json"))
-        -- Load toggles
         for name, val in pairs(data) do
             if toggles[name] then
                 local ok, err = pcall(function() toggles[name].set(val) end)
                 if not ok then warn("[LOAD] Failed to set toggle '" .. name .. "': " .. tostring(err)) end
             end
         end
-        -- Load theme
         if data.Selected_Theme and themeDropdown and themeDropdown.select then
             local ok, err = pcall(function() themeDropdown.select(data.Selected_Theme) end)
             if not ok then warn("[LOAD] Failed to set theme: " .. tostring(err)) end
         end
-        -- Load sliders
         if data.WalkSpeed_Value and sliders["WalkSpeed"] then
             local ok, err = pcall(function() sliders["WalkSpeed"].set(data.WalkSpeed_Value) end)
             if not ok then warn("[LOAD] Failed to set WalkSpeed slider: " .. tostring(err)) end
@@ -1936,7 +1913,6 @@ createButton(settingsTab, "Load Settings", function()
             local ok, err = pcall(function() sliders["Farm Range"].set(data.FarmRange) end)
             if not ok then warn("[LOAD] Failed to set Farm Range slider: " .. tostring(err)) end
         end
-        -- Load positions
         if data.Menu_Pos then
             local ok, err = pcall(function()
                 mainFrame.Position = UDim2.new(data.Menu_Pos[1], data.Menu_Pos[2], data.Menu_Pos[3], data.Menu_Pos[4])
@@ -1966,7 +1942,6 @@ createButton(settingsTab, "Unload GUI", function()
     getgenv().FlingAll_Enabled = false
     getgenv().FlingSelected_Enabled = false
     getgenv().Aimbot_Enabled = false
-    -- Clean up fly
     getgenv().Fly_Enabled = false
     pcall(function()
         UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -2012,7 +1987,6 @@ RunService.Stepped:Connect(function()
             end
         end
     end
-    -- Update range indicator position every step
     if rangeIndicator and rangeIndicator.Transparency < 1 then
         updateRangeIndicator()
     end
@@ -2133,37 +2107,25 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 -- Dragging Logic (Fixed â€“ uses threshold)
--- Already defined above
 makeDraggable(header, mainFrame)
 makeDraggable(toggleBtn, toggleBtn)
 
 -- ============================================================
 -- ADVANCED ANTI-DETECTION & POSITION KICK PROTECTION
 -- ============================================================
--- This section adds multiâ€‘layer spoofing, teleport cloaking,
--- movement limiter, network latency mimic, and serverâ€‘side
--- positional desync protection. All extra checks run at low
--- frequency to avoid performance impact.
-
--- 1) Spoof velocity and angular velocity to server values
 local function spoofPhysics()
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    -- If we are not moving or speed is below threshold, keep velocity zero
     local currentSpeed = hrp.Velocity.Magnitude
-    local maxAllowed = 50 -- typical server threshold; we'll spoof below that
+    local maxAllowed = 50
     if currentSpeed > maxAllowed then
-        -- Report a fake velocity that is within limits but still slightly above normal
         local fakeVel = hrp.Velocity.Unit * math.random(30, 45)
         hrp.AssemblyLinearVelocity = fakeVel
-    else
-        -- Leave as is or set to actual if low
     end
 end
 
--- 2) Teleport cloaking: if a teleport occurs, simulate a smooth path
 local lastPosition = nil
 local positionHistory = {}
 local function teleportCloak()
@@ -2174,25 +2136,20 @@ local function teleportCloak()
     local currentPos = hrp.Position
     if lastPosition then
         local dist = (currentPos - lastPosition).Magnitude
-        if dist > 50 then -- significant jump detected
-            -- Insert intermediate positions to simulate movement
+        if dist > 50 then
             local steps = math.min(math.floor(dist / 5), 10)
             for i = 1, steps do
                 local alpha = i / (steps + 1)
                 local interpPos = lastPosition:Lerp(currentPos, alpha)
                 table.insert(positionHistory, interpPos)
             end
-            -- Override actual position with a blended CFrame over time?
-            -- We'll use a delayed correction: after the jump, we'll gradually move to actual
-            -- This is complex; for now, we'll just reset history and adjust velocity
-            hrp.AssemblyLinearVelocity = (currentPos - lastPosition).Unit * 50 -- fake speed
+            hrp.AssemblyLinearVelocity = (currentPos - lastPosition).Unit * 50
         end
     end
     lastPosition = currentPos
     if #positionHistory > 100 then table.remove(positionHistory, 1) end
 end
 
--- 3) Intercept and modify remote events that report position
 local originalRemoteFunctions = {}
 local function hookMovementRemotes()
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -2201,20 +2158,15 @@ local function hookMovementRemotes()
         if child:IsA("RemoteEvent") or child:IsA("RemoteFunction") then
             local name = child.Name
             if name:lower():find("move") or name:lower():find("pos") or name:lower():find("update") then
-                -- Store original OnClientEvent if exists
                 if child.OnClientEvent then
                     originalRemoteFunctions[child] = child.OnClientEvent
                     child.OnClientEvent = newcclosure(function(self, ...)
-                        -- Intercept and modify arguments if they contain position data
                         local args = {...}
-                        -- Look for Vector3 values and clamp/spoof them
                         for i, arg in ipairs(args) do
                             if type(arg) == "Vector3" then
-                                -- Spoof to a nearby but slightly different value to avoid detection
                                 args[i] = arg + Vector3.new(math.random(-1,1), math.random(-1,1), math.random(-1,1))
                             end
                         end
-                        -- Call original with modified args
                         return originalRemoteFunctions[self](self, unpack(args))
                     end)
                 end
@@ -2225,40 +2177,27 @@ end
 
 pcall(hookMovementRemotes)
 
--- 4) Continuous position correction to prevent rubberbanding
 local function positionCorrection()
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    -- If we have a saved safe position and we stray too far, teleport back
     if getgenv().Safe_Place_Enabled and safePos then
         if (hrp.Position - safePos).Magnitude > 1000 then
             hrp.CFrame = CFrame.new(safePos)
         end
     end
-    -- Additionally, if our velocity is too high and we are not in fly or walkspeed mode, clamp
     local currentSpeed = hrp.Velocity.Magnitude
     local maxAllowedSpeed = 120
     if currentSpeed > maxAllowedSpeed then
-        -- Clamp velocity and notify server via fake movement
         hrp.AssemblyLinearVelocity = hrp.Velocity.Unit * maxAllowedSpeed
     end
 end
 
--- 5) Network latency mimic: add a random small delay to outgoing events to mask high speed
-local function latencyMimic()
-    -- This is tricky without hooking all remotes; we'll just add a small wait in loops
-    -- Already have random waits in some places; we'll add more in critical movement loops
-end
-
--- 6) Stealth movement override: when WalkSpeed or Fly is enabled, throttle speed to avoid detection
-local originalWalkSpeed = 16
 local function throttleSpeed()
     if getgenv().WalkSpeed_Enabled then
         local desired = getgenv().WalkSpeed_Value
         if desired > 25 then
-            -- Add a random variation to speed to appear natural
             local variation = math.random(-2, 2)
             local effective = math.max(16, math.min(25, desired + variation))
             local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -2270,7 +2209,6 @@ local function throttleSpeed()
     if getgenv().Fly_Enabled then
         local flySpeed = getgenv().Fly_Speed
         if flySpeed > 80 then
-            -- Introduce periodic speed reductions to simulate lag
             if math.random(1, 10) == 1 then
                 getgenv().Fly_Speed = flySpeed * 0.8
                 task.wait(0.1)
@@ -2280,42 +2218,16 @@ local function throttleSpeed()
     end
 end
 
--- 7) Antiâ€‘rubberband: force server to accept our position by sending fake "move" events
-local function forcePositionAcceptance()
-    -- This is advanced: we can create fake input events or move parts
-    -- For simplicity, we'll set the HumanoidRootPart's position multiple times per frame
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    -- Force CFrame to be set repeatedly to overwrite server corrections
-    if hrp.Anchored then return end -- skip if anchored
-    -- We'll periodically set velocity to zero to stop server from overriding
-end
-
--- 8) Additional spoofing: modify the player's Humanoid properties to appear normal
 local function spoofHumanoid()
     local char = LocalPlayer.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
-    -- Spoof jump power and walk speed if they are modified
-    if getgenv().WalkSpeed_Enabled then
-        -- But we already set walk speed above; we'll also spoof the value to be within bounds
-        if hum.WalkSpeed > 25 then
-            -- Temporarily set to 16 for any check? Hard because checks are often real-time.
-            -- We'll rely on the metatables earlier.
-        end
-    end
 end
 
--- 9) Handle "Invalid Position" detection by listening for kicks
 local function detectKick()
-    -- We cannot prevent a kick if it's already happening, but we can try to reset position before it triggers.
-    -- We'll monitor for any warning or message.
     local function onChat(msg)
         if msg:lower():find("invalid position") or msg:lower():find("kick") then
-            -- Immediately teleport to safe position or reset
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 if savedPos then
                     LocalPlayer.Character.HumanoidRootPart.CFrame = savedPos
@@ -2325,7 +2237,6 @@ local function detectKick()
             end
         end
     end
-    -- Hook chat output (but may not be reliable)
     pcall(function()
         local chat = game:GetService("Chat")
         if chat then
@@ -2337,7 +2248,6 @@ local function detectKick()
 end
 pcall(detectKick)
 
--- 10) Run all protection loops at low frequency (every 0.2 seconds) to avoid lag
 task.spawn(function()
     while true do
         task.wait(0.2)
@@ -2347,7 +2257,6 @@ task.spawn(function()
             positionCorrection()
             throttleSpeed()
             spoofHumanoid()
-            -- Additional: force set velocity if speed is too high
             local char = LocalPlayer.Character
             if char then
                 local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -2359,24 +2268,19 @@ task.spawn(function()
     end
 end)
 
--- 11) Extra protection: intercept and block any remote that attempts to set our position
 local function blockPositionRemotes()
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
     if not remotes then return end
     for _, child in ipairs(remotes:GetDescendants()) do
         if child:IsA("RemoteEvent") and child.Name:lower():find("position") then
-            -- Override fire method to ignore
             local oldFire = child.FireServer
             child.FireServer = newcclosure(function(self, ...)
-                -- Check if the arguments contain a position that would overwrite us
                 local args = {...}
                 for i, arg in ipairs(args) do
                     if type(arg) == "CFrame" or type(arg) == "Vector3" then
-                        -- Ignore this call by returning nil
                         return
                     end
                 end
-                -- Otherwise pass through
                 return oldFire(self, ...)
             end)
         end
@@ -2384,12 +2288,8 @@ local function blockPositionRemotes()
 end
 pcall(blockPositionRemotes)
 
--- 12) Fake character movement telemetry: send bogus data to confuse server
 local function fakeTelemetry()
-    -- This is a placeholder; we could spam remote events with random positions
-    -- but that might cause lag, so we do it sparingly
     if math.random(1, 50) == 1 then
-        -- Send a fake update to some remote if found
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
         if remotes then
             local moveEvent = remotes:FindFirstChild("MoveUpdate") or remotes:FindFirstChild("PositionUpdate")
@@ -2408,7 +2308,6 @@ task.spawn(function()
     end
 end)
 
--- 13) Override the Stepped loop to also correct if position is out of bounds
 local originalStepped = RunService.Stepped
 local newStepped = function(...)
     originalStepped(...)
@@ -2417,12 +2316,10 @@ local newStepped = function(...)
         if not char then return end
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
-        -- If position is NaN or extremely large, reset
         local pos = hrp.Position
         if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z or math.abs(pos.X) > 1e6 or math.abs(pos.Y) > 1e6 or math.abs(pos.Z) > 1e6 then
             hrp.CFrame = CFrame.new(0, 10, 0)
         end
-        -- Also ensure velocity is not NaN
         local vel = hrp.Velocity
         if vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z then
             hrp.AssemblyLinearVelocity = Vector3.zero
@@ -2431,12 +2328,6 @@ local newStepped = function(...)
 end
 RunService.Stepped = newStepped
 
--- ============================================================
--- EXTRA PROTECTIONS AGAINST INVALID POSITION KICKS
--- ============================================================
--- Additional aggressive anti-kick measures
-
--- Monitor position and reset if it goes out of bounds or becomes NaN
 task.spawn(function()
     while true do
         task.wait(0.5)
@@ -2446,13 +2337,11 @@ task.spawn(function()
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
             local pos = hrp.Position
-            -- Check for NaN or extremely large values
             if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z or math.abs(pos.X) > 1e6 or math.abs(pos.Y) > 1e6 or math.abs(pos.Z) > 1e6 then
                 hrp.CFrame = CFrame.new(0, 10, 0)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
             end
-            -- If we are falling into the void, teleport to safe position
             if pos.Y < -100 then
                 if savedPos then
                     hrp.CFrame = savedPos
@@ -2466,7 +2355,6 @@ task.spawn(function()
     end
 end)
 
--- Additional check: force server to accept our position by repeatedly setting CFrame
 task.spawn(function()
     while true do
         task.wait(0.1)
@@ -2476,7 +2364,6 @@ task.spawn(function()
                 if char then
                     local hrp = char:FindFirstChild("HumanoidRootPart")
                     if hrp then
-                        -- Force position to be accepted by setting it multiple times
                         local currentCF = hrp.CFrame
                         hrp.CFrame = currentCF
                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -2489,13 +2376,9 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- ULTRA ADVANCED ANTI-INVALID-POSITION PROTECTIONS (NEW)
+-- ULTRA ADVANCED ANTI-INVALID-POSITION PROTECTIONS
 -- ============================================================
--- This adds the strongest possible countermeasures against "Invalid Position" kicks,
--- specifically targeting the auto-farm movement patterns while leaving all original code intact.
-
--- 14) Multiple redundant position resets with varying techniques
-local antiKickActive = true  -- always active
+local antiKickActive = true
 
 local function superResetPosition(forcedPos)
     local char = LocalPlayer.Character
@@ -2503,40 +2386,31 @@ local function superResetPosition(forcedPos)
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
     local target = forcedPos or (savedPos and savedPos.Position) or Vector3.new(0, 10, 0)
-    -- Use multiple methods simultaneously to ensure the server accepts the change
     hrp.CFrame = CFrame.new(target)
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
-    -- Force a small movement to override any server-side correction
     hrp.CFrame = hrp.CFrame * CFrame.new(0.01, 0, 0.01)
     task.wait(0.01)
     hrp.CFrame = CFrame.new(target)
-    -- Also set velocity to zero again
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
-    -- If we have a Humanoid, reset its state
     local hum = char:FindFirstChildOfClass("Humanoid")
     if hum then
         hum:ChangeState(Enum.HumanoidStateType.Running)
     end
 end
 
--- 15) Monitor for "Invalid Position" warning messages and act preemptively
 local function ultraDetectKick()
-    -- Hook the output service to catch any warning messages
     pcall(function()
         local output = game:GetService("LogService")
         if output then
             output.MessageOut:Connect(function(message, messageType)
                 if messageType == Enum.MessageType.Warning or messageType == Enum.MessageType.Error then
                     if message:lower():find("invalid position") or message:lower():find("position") and message:lower():find("kick") then
-                        -- Immediately reset position with super method
                         superResetPosition()
-                        -- Also teleport to saved position if available
                         if savedPos then
                             LocalPlayer.Character.HumanoidRootPart.CFrame = savedPos
                         end
-                        -- Disable auto-farm temporarily to prevent re-trigger
                         if getgenv().AutoFarm_Enabled then
                             getgenv().AutoFarm_Enabled = false
                             task.wait(1)
@@ -2547,7 +2421,6 @@ local function ultraDetectKick()
             end)
         end
     end)
-    -- Also hook the chat as fallback
     pcall(function()
         local chat = game:GetService("Chat")
         if chat then
@@ -2569,26 +2442,22 @@ local function ultraDetectKick()
 end
 pcall(ultraDetectKick)
 
--- 16) Aggressive position stabilization during auto-farm: force position to a valid grid
 local function stabilizeFarmPosition()
     if not getgenv().AutoFarm_Enabled then return end
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    -- Round position to nearest 0.5 to avoid floating point drift that may trigger detection
     local pos = hrp.Position
     local rounded = Vector3.new(
         math.floor(pos.X * 2 + 0.5) / 2,
         math.floor(pos.Y * 2 + 0.5) / 2,
         math.floor(pos.Z * 2 + 0.5) / 2
     )
-    -- Only correct if deviation is more than 0.1 studs
     if (pos - rounded).Magnitude > 0.1 then
         hrp.CFrame = CFrame.new(rounded)
         hrp.AssemblyLinearVelocity = Vector3.zero
     end
-    -- Additionally, ensure we are never below the map
     if pos.Y < 0 then
         local safeY = 5
         if savedPos and savedPos.Position.Y > 0 then safeY = savedPos.Position.Y end
@@ -2597,7 +2466,6 @@ local function stabilizeFarmPosition()
     end
 end
 
--- 17) Hook the movement remote to always send a valid position, even if we are mid-teleport
 local function hookMovementRemoteUltra()
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
     if not remotes then return end
@@ -2606,12 +2474,10 @@ local function hookMovementRemoteUltra()
             local oldFire = child.FireServer
             child.FireServer = newcclosure(function(self, ...)
                 local args = {...}
-                -- If any argument is a CFrame or Vector3, ensure it's within valid bounds
                 for i, arg in ipairs(args) do
                     if type(arg) == "CFrame" then
                         local pos = arg.Position
                         if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z or math.abs(pos.X) > 1e5 or math.abs(pos.Y) > 1e5 or math.abs(pos.Z) > 1e5 then
-                            -- Replace with valid position
                             local safe = savedPos and savedPos.Position or Vector3.new(0, 10, 0)
                             args[i] = CFrame.new(safe)
                         end
@@ -2621,7 +2487,6 @@ local function hookMovementRemoteUltra()
                         end
                     end
                 end
-                -- Call original with sanitized args
                 return oldFire(self, unpack(args))
             end)
         end
@@ -2629,7 +2494,6 @@ local function hookMovementRemoteUltra()
 end
 pcall(hookMovementRemoteUltra)
 
--- 18) Spawn a dummy part that moves with us to confuse position checks
 local dummyPart = Instance.new("Part")
 dummyPart.Name = "PositionDummy"
 dummyPart.Size = Vector3.new(1, 1, 1)
@@ -2646,27 +2510,22 @@ task.spawn(function()
                 local hrp = LocalPlayer.Character.HumanoidRootPart
                 dummyPart.Position = hrp.Position + Vector3.new(0, 0.5, 0)
                 dummyPart.Orientation = hrp.Orientation
-                -- Spoof velocity of dummy to match ours but slightly different
                 dummyPart.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity * 0.98
             end
         end)
     end
 end)
 
--- 19) Override the core "Teleport" function to add a delay and validation
 local originalTeleport = game:GetService("TeleportService").Teleport
 game:GetService("TeleportService").Teleport = newcclosure(function(self, ...)
-    -- If we are auto-farming, delay teleport to avoid position desync
     if getgenv().AutoFarm_Enabled then
         task.wait(0.5)
-        -- Reset position before teleport
         superResetPosition()
         task.wait(0.1)
     end
     return originalTeleport(self, ...)
 end)
 
--- 20) Extremely frequent position validation and correction (every frame)
 local validationConnection = RunService.Heartbeat:Connect(function()
     pcall(function()
         local char = LocalPlayer.Character
@@ -2674,21 +2533,17 @@ local validationConnection = RunService.Heartbeat:Connect(function()
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
         local pos = hrp.Position
-        -- Check for invalid values
         if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z then
             hrp.CFrame = CFrame.new(0, 10, 0)
             hrp.AssemblyLinearVelocity = Vector3.zero
             return
         end
-        -- If below map, reset
         if pos.Y < -50 then
             superResetPosition()
             return
         end
-        -- If auto-farm is on, run stabilization
         if getgenv().AutoFarm_Enabled then
             stabilizeFarmPosition()
-            -- Also ensure velocity is not excessive
             local vel = hrp.AssemblyLinearVelocity
             if vel.Magnitude > 200 then
                 hrp.AssemblyLinearVelocity = vel.Unit * 100
@@ -2697,14 +2552,6 @@ local validationConnection = RunService.Heartbeat:Connect(function()
     end)
 end)
 
--- 21) Additional teleport detection: if a teleport occurs, force a position reset after it
-local function onTeleport()
-    -- This is called when the character is teleported (by game or by script)
-    task.wait(0.1)
-    superResetPosition()
-end
-
--- Hook CharacterAdded to detect teleports (since teleport often recreates character)
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(0.2)
     if getgenv().AutoFarm_Enabled then
@@ -2712,7 +2559,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     end
 end)
 
--- Also hook any remote that might teleport us
 pcall(function()
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
     if remotes then
@@ -2720,7 +2566,6 @@ pcall(function()
         if teleportRemote and teleportRemote:IsA("RemoteEvent") then
             local oldFire = teleportRemote.FireServer
             teleportRemote.FireServer = newcclosure(function(self, ...)
-                -- Intercept teleport requests, delay and validate
                 task.wait(0.05)
                 local result = oldFire(self, ...)
                 task.wait(0.1)
@@ -2731,775 +2576,4 @@ pcall(function()
     end
 end)
 
-print("Scripterkiddo's MM2 HUB loaded with Lemon Pill UI and advanced antiâ€‘kick protections. Aimbot rewritten for perfect accuracy.")
-
--- ============================================================
--- ULTRA ADVANCED ANTI-INVALID-POSITION PROTECTIONS (30KB ADDITION)
--- ============================================================
--- These measures are layered on top of the existing protections
--- to provide nearâ€‘perfect immunity against "Invalid Position" kicks.
--- All code is new and does not modify any existing functionality.
-
--- 1) SUPER POSITION WATCHDOG: Runs every frame with multiple correction strategies
-local function superPositionWatchdog()
-    -- This runs on Heartbeat, which is the most frequent update loop
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-
-    -- Get current position and velocity
-    local pos = hrp.Position
-    local vel = hrp.AssemblyLinearVelocity
-
-    -- Check for NaN or infinity
-    if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z then
-        hrp.CFrame = CFrame.new(0, 10, 0)
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        return
-    end
-
-    -- If position is out of bounds, reset immediately
-    if math.abs(pos.X) > 1e6 or math.abs(pos.Y) > 1e6 or math.abs(pos.Z) > 1e6 then
-        hrp.CFrame = CFrame.new(0, 10, 0)
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        return
-    end
-
-    -- If falling into void, teleport up
-    if pos.Y < -100 then
-        hrp.CFrame = CFrame.new(pos.X, 10, pos.Z)
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        return
-    end
-
-    -- Clamp velocity to prevent excessive speed (server may flag)
-    local maxVel = 120
-    if vel.Magnitude > maxVel then
-        hrp.AssemblyLinearVelocity = vel.Unit * maxVel
-    end
-
-    -- Force a tiny random jitter every frame to avoid pattern detection
-    if math.random(1, 10) == 1 then
-        local jitter = Vector3.new(math.random(-1,1)*0.01, 0, math.random(-1,1)*0.01)
-        hrp.CFrame = hrp.CFrame + jitter
-        -- Immediately correct back to original to avoid drift
-        hrp.CFrame = CFrame.new(pos + jitter)
-    end
-
-    -- If walking, ensure position is rounded to a clean grid to avoid floating point drift
-    if hum.MoveDirection.Magnitude > 0.1 then
-        local rounded = Vector3.new(
-            math.floor(pos.X * 4 + 0.5) / 4,
-            math.floor(pos.Y * 4 + 0.5) / 4,
-            math.floor(pos.Z * 4 + 0.5) / 4
-        )
-        if (pos - rounded).Magnitude > 0.05 then
-            hrp.CFrame = CFrame.new(rounded)
-            hrp.AssemblyLinearVelocity = Vector3.zero
-        end
-    end
-
-    -- If we have a saved position, ensure we are not too far from it (unless farming)
-    if savedPos and not getgenv().AutoFarm_Enabled then
-        local dist = (pos - savedPos.Position).Magnitude
-        if dist > 500 then
-            hrp.CFrame = savedPos
-            hrp.AssemblyLinearVelocity = Vector3.zero
-        end
-    end
-
-    -- Extra: ensure Humanoid state is not stuck in a weird state
-    if hum:GetState() == Enum.HumanoidStateType.Dead then
-        hum:ChangeState(Enum.HumanoidStateType.Running)
-    end
-end
-
--- Attach watchdog to Heartbeat (every frame)
-local watchdogConnection = RunService.Heartbeat:Connect(superPositionWatchdog)
-
--- 2) ADDITIONAL METATABLE HIJACKS TO SPOOF PROPERTIES FOR SERVER CHECKS
-local function extraMetatableSpoofing()
-    local mt = getrawmetatable(game)
-    if not mt then return end
-    local oldIndex = mt.__index
-    local oldNewIndex = mt.__newindex
-    local oldNamecall = mt.__namecall
-    setreadonly(mt, false)
-
-    -- Extend __index to spoof more properties
-    mt.__index = newcclosure(function(t, k)
-        if not checkcaller() then
-            if k == "Workspace" then
-                -- Return a proxy workspace that always returns valid positions for our character
-                return oldIndex(t, k)
-            elseif k == "CurrentCamera" then
-                -- Spoof camera position to avoid detection based on viewport
-                return oldIndex(t, k)
-            elseif k == "Humanoid" then
-                -- When accessing our own humanoid, spoof walk speed and jump power
-                local humanoid = oldIndex(t, k)
-                if humanoid and humanoid.Parent == LocalPlayer.Character then
-                    return humanoid
-                end
-            end
-        end
-        return oldIndex(t, k)
-    end)
-
-    -- Extend __newindex to block modifications to critical properties from server
-    mt.__newindex = newcclosure(function(t, k, v)
-        if not checkcaller() then
-            if k == "WalkSpeed" or k == "JumpPower" then
-                -- Let it set but we'll override later
-                return oldNewIndex(t, k, v)
-            end
-            if k == "CFrame" and typeof(v) == "CFrame" then
-                -- Validate CFrame before allowing server to set it
-                local pos = v.Position
-                if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z or math.abs(pos.X) > 1e6 then
-                    return
-                end
-                if math.abs(pos.Y) > 1e6 or math.abs(pos.Z) > 1e6 then
-                    return
-                end
-                -- Allow only if within bounds
-                return oldNewIndex(t, k, v)
-            end
-        end
-        return oldNewIndex(t, k, v)
-    end)
-
-    -- Extend __namecall to intercept remote calls that might set position
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if not checkcaller() then
-            if method == "FireServer" and self:IsA("RemoteEvent") then
-                -- Intercept remote events that might contain position data
-                local args = {...}
-                for i, arg in ipairs(args) do
-                    if type(arg) == "CFrame" then
-                        local pos = arg.Position
-                        if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z or math.abs(pos.X) > 1e5 then
-                            -- Replace with safe position
-                            args[i] = CFrame.new(0, 10, 0)
-                        end
-                    elseif type(arg) == "Vector3" then
-                        if arg.X ~= arg.X or arg.Y ~= arg.Y or arg.Z ~= arg.Z or math.abs(arg.X) > 1e5 then
-                            args[i] = Vector3.new(0, 10, 0)
-                        end
-                    end
-                end
-                -- Call original with sanitized args
-                return oldNamecall(self, unpack(args))
-            end
-        end
-        return oldNamecall(self, ...)
-    end)
-
-    setreadonly(mt, true)
-end
-pcall(extraMetatableSpoofing)
-
--- 3) HOOK THE NETWORK OWNERSHIP TO PREVENT SERVER FROM REVERTING POSITION
-local function hookNetworkOwnership()
-    pcall(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                -- Force network ownership to client to prevent server corrections
-                part:SetNetworkOwner(LocalPlayer)
-            end
-        end
-    end)
-end
--- Run this periodically to ensure ownership
-task.spawn(function()
-    while true do
-        task.wait(1)
-        pcall(hookNetworkOwnership)
-    end
-end)
-
--- 4) ADD A DUMMY PART THAT MOVES WITH US TO CONFUSE POSITION CHECKS (ENHANCED)
-local dummyParts = {}
-for i = 1, 5 do
-    local d = Instance.new("Part")
-    d.Name = "PositionDummy_" .. i
-    d.Size = Vector3.new(0.5, 0.5, 0.5)
-    d.Anchored = true
-    d.CanCollide = false
-    d.Transparency = 0.5
-    d.Material = Enum.Material.Neon
-    d.Color = Color3.new(1, 0, 0)
-    d.Parent = workspace
-    table.insert(dummyParts, d)
-end
-
-task.spawn(function()
-    while true do
-        task.wait(0.2)
-        pcall(function()
-            local char = LocalPlayer.Character
-            if not char then return end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            local pos = hrp.Position
-            for i, d in ipairs(dummyParts) do
-                local offset = Vector3.new(math.random(-3,3), math.random(-1,1), math.random(-3,3))
-                d.Position = pos + offset
-                d.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity * 0.9
-            end
-        end)
-    end
-end)
-
--- 5) INTERCEPT AND BLOCK REMOTES THAT MIGHT TRIGGER KICKS
-local function blockSuspiciousRemotes()
-    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-    if not remotes then return end
-    for _, child in ipairs(remotes:GetDescendants()) do
-        if child:IsA("RemoteEvent") then
-            local name = child.Name:lower()
-            if name:find("kick") or name:find("ban") or name:find("detect") or name:find("check") or name:find("verify") then
-                -- Override FireServer to do nothing
-                local oldFire = child.FireServer
-                child.FireServer = newcclosure(function(self, ...)
-                    -- Ignore all calls
-                    return
-                end)
-                -- Also override OnClientEvent to block incoming
-                child.OnClientEvent = newcclosure(function(self, ...)
-                    -- Ignore
-                end)
-            end
-        end
-    end
-end
-pcall(blockSuspiciousRemotes)
-
--- 6) ADD A SECOND LAYER OF POSITION CORRECTION USING BODY MOVERS
-local positionCorrector = nil
-local function createPositionCorrector()
-    if positionCorrector then return end
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    positionCorrector = Instance.new("BodyPosition")
-    positionCorrector.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-    positionCorrector.P = 10000
-    positionCorrector.D = 1000
-    positionCorrector.Position = hrp.Position
-    positionCorrector.Parent = hrp
-end
-
-LocalPlayer.CharacterAdded:Connect(function()
-    if positionCorrector then positionCorrector:Destroy(); positionCorrector = nil end
-    task.wait(0.5)
-    pcall(createPositionCorrector)
-end)
-
--- Update corrector position every frame
-RunService.Heartbeat:Connect(function()
-    pcall(function()
-        if positionCorrector and positionCorrector.Parent then
-            local char = LocalPlayer.Character
-            if char then
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    positionCorrector.Position = hrp.Position
-                    -- Also apply a slight force to counteract server corrections
-                    positionCorrector.Position = positionCorrector.Position + Vector3.new(0, 0.01, 0)
-                end
-            end
-        end
-    end)
-end)
-
--- 7) SPOOF THE "GetService" FOR TELEPORT AND OTHER CRITICAL SERVICES
-local function spoofGetService()
-    local mt = getrawmetatable(game)
-    if not mt then return end
-    local oldNamecall = mt.__namecall
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if not checkcaller() and method == "GetService" then
-            local svc = select(1, ...)
-            if svc == "TeleportService" then
-                -- Return a fake service that does nothing
-                local fake = {}
-                fake.Teleport = function() end
-                fake.TeleportToPlaceInstance = function() end
-                fake.GetLocalPlayer = function() return LocalPlayer end
-                return fake
-            end
-            if svc == "ScriptContext" then
-                -- Return a fake context that doesn't execute scripts
-                return oldNamecall(self, ...)
-            end
-        end
-        return oldNamecall(self, ...)
-    end)
-end
-pcall(spoofGetService)
-
--- 8) ADD A PERSISTENT ANTI-KICK TIMER: reset position every few seconds
-task.spawn(function()
-    while true do
-        task.wait(5)
-        pcall(function()
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                local hrp = LocalPlayer.Character.HumanoidRootPart
-                -- Force a small movement to prevent idle detection
-                hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 0.01)
-                hrp.AssemblyLinearVelocity = Vector3.zero
-            end
-        end)
-    end
-end)
-
--- 9) HOOK THE OUTPUT TO DETECT KICK MESSAGES AND ACT INSTANTLY
-local function superKickDetector()
-    local function onOutput(message)
-        if type(message) == "string" and (message:lower():find("invalid position") or message:lower():find("kick") or message:lower():find("ban") or message:lower():find("detected")) then
-            -- Immediately reset everything
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = LocalPlayer.Character.HumanoidRootPart
-                    if savedPos then
-                        hrp.CFrame = savedPos
-                    else
-                        hrp.CFrame = CFrame.new(0, 10, 0)
-                    end
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                    hrp.AssemblyAngularVelocity = Vector3.zero
-                end
-                -- Disable features temporarily
-                getgenv().AutoFarm_Enabled = false
-                task.wait(1)
-                getgenv().AutoFarm_Enabled = true
-            end)
-        end
-    end
-
-    -- Hook the Output service
-    pcall(function()
-        local output = game:GetService("LogService")
-        if output then
-            output.MessageOut:Connect(onOutput)
-        end
-    end)
-
-    -- Also hook the chat as backup
-    pcall(function()
-        local chat = game:GetService("Chat")
-        if chat then
-            chat.MessageReceived:Connect(function(msg)
-                if type(msg) == "string" then
-                    onOutput(msg)
-                end
-            end)
-        end
-    end)
-
-    -- Hook the Player's "Kick" function itself
-    pcall(function()
-        local oldKick = LocalPlayer.Kick
-        LocalPlayer.Kick = newcclosure(function(self, reason)
-            -- Prevent kick by returning nil, but also reset position
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = LocalPlayer.Character.HumanoidRootPart
-                    if savedPos then
-                        hrp.CFrame = savedPos
-                    else
-                        hrp.CFrame = CFrame.new(0, 10, 0)
-                    end
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                end
-            end)
-            -- Block kick
-            return nil
-        end)
-    end)
-end
-pcall(superKickDetector)
-
--- 10) ADD A FAKE "ANTI-CHEAT" FLAG TO CONFUSE SERVER SCRIPTS
-local function fakeAntiCheat()
-    pcall(function()
-        local fake = Instance.new("BoolValue")
-        fake.Name = "AntiCheatPassed"
-        fake.Value = true
-        fake.Parent = LocalPlayer
-        -- Also create fake modules
-        local mod = Instance.new("ModuleScript")
-        mod.Name = "AntiCheat"
-        mod.Source = "return { passed = true }"
-        mod.Parent = ReplicatedStorage
-    end)
-end
-pcall(fakeAntiCheat)
-
--- 11) ADD A THREAD THAT CONSTANTLY RESETS THE CHARACTER'S POSITION TO A VALID ONE
-task.spawn(function()
-    local validPos = Vector3.new(0, 10, 0)
-    while true do
-        task.wait(0.5)
-        pcall(function()
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                local hrp = LocalPlayer.Character.HumanoidRootPart
-                local pos = hrp.Position
-                -- If position is not valid, reset                if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z or math.abs(pos.X) > 1e5 or math.abs(pos.Y) > 1e5 or math.abs(pos.Z) > 1e5 then
-                    hrp.CFrame = CFrame.new(validPos)
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                end
-                -- If below map, reset
-                if pos.Y < -50 then
-                    hrp.CFrame = CFrame.new(pos.X, 10, pos.Z)
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                end
-                -- If we have a saved position, ensure we are not too far (unless farming)
-                if savedPos and not getgenv().AutoFarm_Enabled then
-                    if (pos - savedPos.Position).Magnitude > 1000 then
-                        hrp.CFrame = savedPos
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- 12) SPOOF THE "HumanoidRootPart" PROPERTIES TO RETURN FAKE VALUES
-local function spoofHRPProperties()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    -- Override the GetPropertyChangedSignal for position to catch any changes
-    local oldGet = hrp.GetPropertyChangedSignal
-    hrp.GetPropertyChangedSignal = newcclosure(function(self, prop)
-        if prop == "Position" then
-            -- Validate the position before allowing the change
-            local pos = self.Position
-            if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z or math.abs(pos.X) > 1e6 then
-                -- Revert to a safe position
-                self.CFrame = CFrame.new(0, 10, 0)
-            end
-        end
-        return oldGet(self, prop)
-    end)
-end
-pcall(spoofHRPProperties)
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    pcall(spoofHRPProperties)
-end)
-
--- 13) ADD A PERSISTENT "NO CLIP" ON SELF TO AVOID STUCK DETECTION
-task.spawn(function()
-    while true do
-        task.wait(1)
-        pcall(function()
-            if LocalPlayer.Character then
-                for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                        -- Also set network ownership
-                        part:SetNetworkOwner(LocalPlayer)
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- 14) INTERCEPT AND SPOOF THE "GetVelocity" METHOD
-local function spoofVelocity()
-    pcall(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-        -- Override the Velocity getter
-        local oldVel = hrp.Velocity
-        hrp.Velocity = newcclosure(function(self)
-            -- Return a fake velocity that is always within limits
-            local realVel = self.AssemblyLinearVelocity
-            if realVel.Magnitude > 120 then
-                return realVel.Unit * 100
-            end
-            return realVel
-        end)
-    end)
-end
-pcall(spoofVelocity)
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    pcall(spoofVelocity)
-end)
-
--- 15) ADD A SECOND LAYER OF METATABLE PROTECTION AGAINST REMOTE SPAM
-local function extraRemoteProtection()
-    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-    if not remotes then return end
-    for _, child in ipairs(remotes:GetDescendants()) do
-        if child:IsA("RemoteEvent") then
-            -- Override the InvokeServer and FireServer to validate arguments
-            if child.FireServer then
-                local oldFire = child.FireServer
-                child.FireServer = newcclosure(function(self, ...)
-                    local args = {...}
-                    for i, arg in ipairs(args) do
-                        if type(arg) == "CFrame" then
-                            local pos = arg.Position
-                            if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z or math.abs(pos.X) > 1e5 then
-                                args[i] = CFrame.new(0, 10, 0)
-                            end
-                        elseif type(arg) == "Vector3" then
-                            if arg.X ~= arg.X or arg.Y ~= arg.Y or arg.Z ~= arg.Z or math.abs(arg.X) > 1e5 then
-                                args[i] = Vector3.new(0, 10, 0)
-                            end
-                        end
-                    end
-                    return oldFire(self, unpack(args))
-                end)
-            end
-            if child.InvokeServer then
-                local oldInvoke = child.InvokeServer
-                child.InvokeServer = newcclosure(function(self, ...)
-                    local args = {...}
-                    for i, arg in ipairs(args) do
-                        if type(arg) == "CFrame" then
-                            local pos = arg.Position
-                            if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z or math.abs(pos.X) > 1e5 then
-                                args[i] = CFrame.new(0, 10, 0)
-                            end
-                        elseif type(arg) == "Vector3" then
-                            if arg.X ~= arg.X or arg.Y ~= arg.Y or arg.Z ~= arg.Z or math.abs(arg.X) > 1e5 then
-                                args[i] = Vector3.new(0, 10, 0)
-                            end
-                        end
-                    end
-                    return oldInvoke(self, unpack(args))
-                end)
-            end
-        end
-    end
-end
-pcall(extraRemoteProtection)
-
--- 16) ADD A WATCHDOG THAT MONITORS THE CHARACTER'S STATE AND RESETS IF ANYTHING SUSPICIOUS
-task.spawn(function()
-    while true do
-        task.wait(0.3)
-        pcall(function()
-            local char = LocalPlayer.Character
-            if not char then return end
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if not hum then return end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-
-            -- If health is 0 but character is still alive, reset
-            if hum.Health == 0 and hum:GetState() ~= Enum.HumanoidStateType.Dead then
-                hum:ChangeState(Enum.HumanoidStateType.Dead)
-            end
-
-            -- If humanoid is stuck in a weird state, force running
-            if hum:GetState() == Enum.HumanoidStateType.Physics or hum:GetState() == Enum.HumanoidStateType.Landed then
-                hum:ChangeState(Enum.HumanoidStateType.Running)
-            end
-        end)
-    end
-end)
-
--- 17) SPOOF THE "ServerStorage" AND "ReplicatedStorage" TO PREVENT SCANNING
-local function spoofStorage()
-    pcall(function()
-        local fake = Instance.new("Folder")
-        fake.Name = "AntiCheatFolder"
-        fake.Parent = ReplicatedStorage
-        -- Add fake modules
-        for _, name in ipairs({"Check", "Verify", "Kick", "Ban"}) do
-            local m = Instance.new("ModuleScript")
-            m.Name = name
-            m.Source = "return {}"
-            m.Parent = fake
-        end
-    end)
-end
-pcall(spoofStorage)
-
--- 18) ADD A FORCED "HEARTBEAT" RESYNC: every frame we set the CFrame to itself to force server to accept it
-local resyncConnection = RunService.Heartbeat:Connect(function()
-    pcall(function()
-        local char = LocalPlayer.Character
-        if char then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                -- Force a re-sync by setting CFrame to itself
-                hrp.CFrame = hrp.CFrame
-                -- Also reset velocity slightly to avoid accumulation
-                if hrp.AssemblyLinearVelocity.Magnitude > 1 then
-                    hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity * 0.99
-                end
-            end
-        end
-    end)
-end)
-
--- 19) ADD A "VIRTUAL" USER INPUT SPOOFER TO PREVENT IDLE KICKS
-task.spawn(function()
-    local vu = game:GetService("VirtualUser")
-    while true do
-        task.wait(10)
-        pcall(function()
-            if getgenv().Anti_AFK then
-                vu:Button2Down(Vector2.new(0,0), Camera.CFrame)
-                task.wait(0.1)
-                vu:Button2Up(Vector2.new(0,0), Camera.CFrame)
-            end
-        end)
-    end
-end)
-
--- 20) ADD A FINAL LAYER OF PROTECTION: HOOK "Game" DESERVED CHILDREN TO RETURN NIL
-local function blockAntiCheatObjects()
-    local function scanAndBlock(obj)
-        for _, child in ipairs(obj:GetChildren()) do
-            if child.Name:lower():find("anti") or child.Name:lower():find("cheat") or child.Name:lower():find("exploit") or child.Name:lower():find("detect") then
-                child:Destroy()
-            end
-        end
-    end
-    -- Run periodically
-    task.spawn(function()
-        while true do
-            task.wait(5)
-            pcall(function()
-                scanAndBlock(game)
-                scanAndBlock(ReplicatedStorage)
-                scanAndBlock(workspace)
-                scanAndBlock(LocalPlayer)
-            end)
-        end
-    end)
-end
-pcall(blockAntiCheatObjects)
-
--- 21) ADD A "FALLBACK" POSITION RESET IN CASE ALL ELSE FAILS
-local fallbackPos = Vector3.new(0, 10, 0)
-task.spawn(function()
-    while true do
-        task.wait(1)
-        pcall(function()
-            local char = LocalPlayer.Character
-            if char then
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local pos = hrp.Position
-                    -- Check if position is valid, if not, reset
-                    if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z then
-                        hrp.CFrame = CFrame.new(fallbackPos)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                    end
-                    -- If somehow the character is anchored, unanchor
-                    if hrp.Anchored then
-                        hrp.Anchored = false
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- 22) ADD A "NETWORK" SPOOFER: pretend to have a different ping and jitter
-local function fakeNetworkStats()
-    pcall(function()
-        local stats = game:GetService("Stats")
-        if stats then
-            local network = stats:FindFirstChild("Network")
-            if network then
-                -- Override the "Ping" value
-                local ping = network:FindFirstChild("Ping")
-                if ping then
-                    ping:GetPropertyChangedSignal("Value"):Connect(function()
-                        if ping.Value < 20 then
-                            ping.Value = 50 + math.random(0, 50)
-                        end
-                    end)
-                end
-            end
-        end
-    end)
-end
-pcall(fakeNetworkStats)
-
--- 23) ADD A "CHARACTER" RESET TRIGGER: if we get too far from a safe area, teleport back
-task.spawn(function()
-    local safeArea = Vector3.new(0, 10, 0)
-    while true do
-        task.wait(0.5)
-        pcall(function()
-            if LocalPlayer.Character then
-                local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local pos = hrp.Position
-                    -- If we are very far from the map center, reset
-                    if math.abs(pos.X) > 5000 or math.abs(pos.Z) > 5000 then
-                        hrp.CFrame = CFrame.new(safeArea)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- 24) ADD A "HUMANOID" STATE MONITOR TO PREVENT BEING STUCK IN AIR
-task.spawn(function()
-    while true do
-        task.wait(0.2)
-        pcall(function()
-            local char = LocalPlayer.Character
-            if char then
-                local hum = char:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    local hrp = char:FindFirstChild("HumanoidRootPart")
-                    if hrp and hrp.Position.Y > 50 and hum:GetState() == Enum.HumanoidStateType.Freefall then
-                        -- Force land
-                        hum:ChangeState(Enum.HumanoidStateType.Landed)
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- 25) FINAL EXTRA: OVERRIDE THE "Teleport" METHOD TO PREVENT UNWANTED TELEPORTS
-local function overrideTeleport()
-    local teleportService = game:GetService("TeleportService")
-    local oldTeleport = teleportService.Teleport
-    teleportService.Teleport = newcclosure(function(self, ...)
-        -- Block any teleport that isn't initiated by us
-        pcall(function()
-            if not getgenv().Safe_Place_Enabled and not getgenv().AutoFarm_Enabled then
-                -- Might be a server teleport, refuse
-                return
-            end
-        end)
-        return oldTeleport(self, ...)
-    end)
-end
-pcall(overrideTeleport)
-
-print("Scripterkiddo's MM2 HUB loaded with Lemon Pill UI and advanced antiâ€‘kick protections. Aimbot rewritten for perfect accuracy.")
+print("Scripterkiddo's MM2 HUB loaded with Lemon Pill UI and advanced anti-kick protections. Aimbot rewritten for perfect accuracy.")
